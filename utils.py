@@ -3,13 +3,6 @@
 
 
 
-def img_porcess(img):
-	"""
-	Porcessing image required by vgg16
-	"""
-
-	pass
-
 
 
 def extract_roi(image,location, scale):
