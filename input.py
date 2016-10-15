@@ -37,17 +37,21 @@ class InputProducer:
 			idx += 1
 			yield img, idx, gt
 
-	def porcess_img(self, path):
+	def porcess_img(img):
 		"""
 		Porcessing image required by vgg16
 		Returns:
-			image of shape [1, 224, 224, 3]
-			[1, height, width, depth]
+		image of shape [224, 224, 3]
+		[1, height, width, depth]
 		"""
 		# load image
-		img = skimage.io.imread(path)
 		img = img / 255.0
 		assert (0 <= img).all() and (img <= 1.0).all()
+
+		# conert to color image if its a grey one
+		if len(img.shape) < 3:
+			img = skimage.color.gray2rgb(img)
+		assert len(img.shape) == 3
 
 		# crop image from center
 		short_edge = min(img.shape[:2])
@@ -57,7 +61,7 @@ class InputProducer:
 
 		# resize to 224, 224
 		resized_img = skimage.transform.resize(crop_img, (224, 224))
-		return resized_img
+		return resized_img.reshape((1, 224, 224, 3))
 
 
 	def porcess_gt(self, gt):
