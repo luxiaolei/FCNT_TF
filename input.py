@@ -41,7 +41,7 @@ class InputProducer:
 		"""
 		Porcessing image required by vgg16
 		Returns:
-			image of shape [224, 224, 3]
+			image of shape [1, 224, 224, 3]
 			[1, height, width, depth]
 		"""
 		# load image
@@ -63,7 +63,7 @@ class InputProducer:
 	def porcess_gt(self, gt):
 		"""
 		Each row in the ground-truth files represents the bounding box 
-		of the target in that frame. (x, y, box-width, box-height)
+		of the target in that frame. (tl_x, tl_y, box-width, box-height)
 		"""
 		return gt
 
