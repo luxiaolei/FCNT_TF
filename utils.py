@@ -273,7 +273,7 @@ def gen_mask(im_sz, fea_sz, roi_sz, location, l_off, s):
 	return convas
 
 
-
+def compute_sa
 
 
 	pass

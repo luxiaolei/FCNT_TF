@@ -27,6 +27,8 @@ class Vgg16(object):
 		graph_def = tf.GraphDef()
 		graph_def.ParseFromString(fileContent)
 
+		
+
 		# Change input tensor
 		tf.import_graph_def(graph_def, input_map={ "images": self.inputs }, name='vgg16')
 
