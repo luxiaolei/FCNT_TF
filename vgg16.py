@@ -12,9 +12,10 @@ class vgg16:
     def __init__(self, imgs, weights=None, sess=None):
         self.imgs = imgs
 
-        self.convlayers()
-        self.fc_layers()
-        self.probs = tf.nn.softmax(self.fc3l)
+        with tf.name_scope('vgg') as scope:
+            self.convlayers()
+            self.fc_layers()
+            self.probs = tf.nn.softmax(self.fc3l)
         if weights is not None and sess is not None:
             self.load_weights(weights, sess)
     
@@ -25,13 +26,13 @@ class vgg16:
         # zero-mean input
         with tf.name_scope('preprocess') as scope:
             mean = tf.constant([123.68, 116.779, 103.939], dtype=tf.float32, shape=[1, 1, 1, 3], name='img_mean')
-            images = self.imgs-mean
-        
+            self.img_zero_mean = self.imgs-mean
+
         # conv1_1
         with tf.name_scope('conv1_1') as scope:
             kernel = tf.Variable(tf.truncated_normal([3, 3, 3, 64], dtype=tf.float32,
                                                      stddev=1e-1), name='weights')
-            conv = tf.nn.conv2d(images, kernel, [1, 1, 1, 1], padding='SAME')
+            conv = tf.nn.conv2d(self.img_zero_mean, kernel, [1, 1, 1, 1], padding='SAME')
             biases = tf.Variable(tf.constant(0.0, shape=[64], dtype=tf.float32),
                                  trainable=True, name='biases')
             out = tf.nn.bias_add(conv, biases)
