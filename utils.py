@@ -6,7 +6,7 @@ import skimage
 from scipy.misc import imresize
 
 
-def variable_on_cpu(name, shape, initializer):
+def variable_on_cpu(scope, name, shape, initializer):
 	"""Helper to create a Variable stored on CPU memory.
 
 	Args:
@@ -19,11 +19,12 @@ def variable_on_cpu(name, shape, initializer):
 
 	"""
 	dtype = tf.float32
-	with tf.device('/cpu:0'):
-		variable = tf.get_variable(name, shape, initializer=initializer, dtype=dtype)
+	with tf.name_scope(scope) as scope:
+		with tf.device('/cpu:0'):
+			variable = tf.get_variable(name, shape, initializer=initializer, dtype=dtype)
 	return variable
 
-def variable_with_weight_decay(name, shape, stddev=1e-3, wd=None):
+def variable_with_weight_decay(scope, name, shape, stddev=1e-3, wd=None):
 	"""Helper to create an initialized Variable with weight decay
 
 	Args:
@@ -38,12 +39,14 @@ def variable_with_weight_decay(name, shape, stddev=1e-3, wd=None):
 	"""
 	dtype = tf.float32
 	variable = variable_on_cpu(
+							scope,
 							name, 
 							shape,
 							initializer=tf.truncated_normal_initializer(stddev=stddev, dtype=dtype))
 	if wd is not None:
-		weight_decay = tf.mul(tf.nn.l2_loss(variable), wd, name='weight_loss')
-		tf.add_to_collection('losses', weight_decay)
+		with tf.name_scope(scope) as scope:
+			weight_decay = tf.mul(tf.nn.l2_loss(variable), wd, name='weight_loss')
+			tf.add_to_collection('losses', weight_decay)
 	return variable
 
 

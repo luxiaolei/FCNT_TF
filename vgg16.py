@@ -9,8 +9,8 @@ from imagenet_classes import class_names
 
 
 class vgg16:
-    def __init__(self, imgs, weights=None, sess=None):
-        self.imgs = imgs
+    def __init__(self, weights=None, sess=None):
+        self.imgs = tf.placeholder(tf.float32, [None, 224, 224, 3])
 
         with tf.name_scope('vgg') as scope:
             self.convlayers()
@@ -150,14 +150,14 @@ class vgg16:
 
         # conv4_3
         with tf.name_scope('conv4_3') as scope:
-            kernel = tf.Variable(tf.truncated_normal([3, 3, 512, 512], dtype=tf.float32,
+            self.kernel4_3 = tf.Variable(tf.truncated_normal([3, 3, 512, 512], dtype=tf.float32,
                                                      stddev=1e-1), name='weights')
-            conv = tf.nn.conv2d(self.conv4_2, kernel, [1, 1, 1, 1], padding='SAME')
+            conv = tf.nn.conv2d(self.conv4_2, self.kernel4_3 , [1, 1, 1, 1], padding='SAME')
             biases = tf.Variable(tf.constant(0.0, shape=[512], dtype=tf.float32),
                                  trainable=True, name='biases')
             out = tf.nn.bias_add(conv, biases)
             self.conv4_3 = tf.nn.relu(out, name=scope)
-            self.parameters += [kernel, biases]
+            self.parameters += [self.kernel4_3, biases]
 
         # pool4
         self.pool4 = tf.nn.max_pool(self.conv4_3,
@@ -190,14 +190,14 @@ class vgg16:
 
         # conv5_3
         with tf.name_scope('conv5_3') as scope:
-            kernel = tf.Variable(tf.truncated_normal([3, 3, 512, 512], dtype=tf.float32,
+            self.kernel5_3  = tf.Variable(tf.truncated_normal([3, 3, 512, 512], dtype=tf.float32,
                                                      stddev=1e-1), name='weights')
-            conv = tf.nn.conv2d(self.conv5_2, kernel, [1, 1, 1, 1], padding='SAME')
+            conv = tf.nn.conv2d(self.conv5_2, self.kernel5_3 , [1, 1, 1, 1], padding='SAME')
             biases = tf.Variable(tf.constant(0.0, shape=[512], dtype=tf.float32),
                                  trainable=True, name='biases')
             out = tf.nn.bias_add(conv, biases)
             self.conv5_3 = tf.nn.relu(out, name=scope)
-            self.parameters += [kernel, biases]
+            self.parameters += [self.kernel5_3, biases]
 
         # pool5
         self.pool5 = tf.nn.max_pool(self.conv5_3,
@@ -245,13 +245,28 @@ class vgg16:
         weights = np.load(weight_file)
         keys = sorted(weights.keys())
         for i, k in enumerate(keys):
-            print(i, k, np.shape(weights[k]))
+            #print(i, k, np.shape(weights[k]))
             sess.run(self.parameters[i].assign(weights[k]))
+
+    def print_prob(self, img, sess):
+        """Print Top 5 probabilities"""
+        assert len(img.shape) == 3
+        if img.shape[:2] != (224,224):
+            print('Input image size %s does not fit to the network. Resizing to (244,244)'\
+                    %img.shape)
+            img = imresize(img, (224, 224))
+
+        prob, img_porcessed = sess.run([self.probs, self.img_zero_mean], feed_dict={self.imgs: [img]})
+        preds = (np.argsort(prob[0])[::-1])[0:5]
+        for p in preds:
+            print(class_names[p], prob[0][p])
+        self.img_porcessed = img_porcessed[0]
+
 
 if __name__ == '__main__':
     sess = tf.Session()
-    imgs = tf.placeholder(tf.float32, [None, 224, 224, 3])
-    vgg = vgg16(imgs, 'vgg16_weights.npz', sess)
+    
+    vgg = vgg16('vgg16_weights.npz', sess)
 
     img1 = imread('laska.png', mode='RGB')
     img1 = imresize(img1, (224, 224))

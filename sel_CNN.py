@@ -22,7 +22,7 @@ class selCNN:
 		'dropout_rate': 0.3,
 		'k_size': [3, 3, 512, 1],
 		'wd': 0.5,
-		'lr_initial': 1e-8, # 1e-8 gives 438 after 200 steps, 1e-7 gives better maps?
+		'lr_initial': 1e-9, # 1e-8 gives 438 after 200 steps, 1e-7 gives better maps?
 		'lr_decay_steps': 0,
 		'lr_decay_rate':  1
 		}
@@ -36,10 +36,10 @@ class selCNN:
 		dropout_layer = tf.nn.dropout(self.input_layer, self.params['dropout_rate'])
 
 		# Conv layer with bias 
-		kernel = variable_with_weight_decay('kernel',\
+		kernel = variable_with_weight_decay(self.scope, 'kernel',\
 							self.params['k_size'], wd = self.params['wd'])
 		conv = tf.nn.conv2d(dropout_layer, kernel, [1,1,1,1], 'SAME')
-		bias = variable_on_cpu('biases', [1], tf.constant_initializer(0.1))
+		bias = variable_on_cpu(self.scope,'biases', [1], tf.constant_initializer(0.1))
 		pre_M = tf.nn.bias_add(conv, bias)
 
 		# Subtract mean 
@@ -65,8 +65,11 @@ class selCNN:
 		if isinstance(gt_M, np.ndarray):
 			gt_M = tf.constant(gt_M.reshape((1,gt_M.shape[0], gt_M.shape[1], 1)), dtype=tf.float32)
 
+		gt_shape, pre_shape = gt_M.get_shape().as_list()[1:], self.pre_M.get_shape().as_list()[1:]
 		assert isinstance(gt_M, tf.Tensor)
-		assert gt_M.get_shape() == self.pre_M.get_shape(), 'Shapes are not compatiable!'
+		assert gt_shape == pre_shape, \
+			'Shapes are not compatiable! gt_M : {0}, pre_M : {1}'.format(
+				gt_shape, pre_shape)
 		
 		with tf.name_scope(self.scope) as scope:
 			# Root mean square loss

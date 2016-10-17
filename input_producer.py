@@ -4,7 +4,7 @@ import skimage
 
 import numpy as np
 
-from scipy.misc import imresize
+from scipy.misc import imread, imresize
 
 from utils import gauss2d
 
@@ -27,13 +27,15 @@ class InputProducer:
 	def get_image(self):
 		idx = -1
 		for img_path, gt in zip(self.imgs_path_list, self.gts_list):
-			img = skimage.io.imread(img_path)
+			img = imread(img_path, mode='RGB')
+
 			assert min(img.shape[:2]) >= 224
 
 			# Gray to color. RES??
-			if len(img.shape) < 3:
-				img = skimage.color.gray2rgb(img)
+			#if len(img.shape) < 3:
+			#img = skimage.color.gray2rgb(img)
 			assert len(img.shape) == 3
+
 			idx += 1
 			if idx == 0: 
 				self.first_gt = gt
@@ -107,6 +109,7 @@ class InputProducer:
 		preimg = np.zeros(img.shape[:2])
 		roi_pos = [x1, y1, x2-x1+1, y2-y1+1]
 		#print(roi.max(), 'roi max')
+		#roi = roi.astype(np.float32)
 		return roi, roi_pos, preimg, pad
 
 	def gen_mask(self, fea_sz):
@@ -164,9 +167,10 @@ class InputProducer:
 
 		# Swap back, and normalize
 		convas = convas / convas.max()
-		convas = np.transpose(convas)
+		#convas = np.transpose(convas)
 
-		return convas
+
+		return convas#[..., np.newaxis]
 
 	# Deprecated method.
 	def porcess_img(img):
