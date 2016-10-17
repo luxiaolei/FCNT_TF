@@ -11,12 +11,13 @@ from imagenet_classes import class_names
 class vgg16:
     def __init__(self, imgs, weights=None, sess=None):
         self.imgs = imgs
+
         self.convlayers()
         self.fc_layers()
         self.probs = tf.nn.softmax(self.fc3l)
         if weights is not None and sess is not None:
             self.load_weights(weights, sess)
-
+    
 
     def convlayers(self):
         self.parameters = []
@@ -25,7 +26,7 @@ class vgg16:
         with tf.name_scope('preprocess') as scope:
             mean = tf.constant([123.68, 116.779, 103.939], dtype=tf.float32, shape=[1, 1, 1, 3], name='img_mean')
             images = self.imgs-mean
-
+        
         # conv1_1
         with tf.name_scope('conv1_1') as scope:
             kernel = tf.Variable(tf.truncated_normal([3, 3, 3, 64], dtype=tf.float32,
