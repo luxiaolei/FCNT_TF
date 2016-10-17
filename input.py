@@ -1,16 +1,9 @@
 
 
-import skimage
-import skimage.io
-import skimage.transform
 import numpy as np
 
-
-
-
-def load_image(path):
-
-
+import os
+import skimage
 
 
 class InputProducer:
@@ -18,25 +11,36 @@ class InputProducer:
 		"""
 
 		"""
-		# conert Imgs_path into a list of img path
-		self.img_fns = []
-
-		# read gt_path into a list
-		self.gts = []
-
-
-
+		self.imgs_path_list = [os.path.join(imgs_path, fn) for fn in sorted(os.listdir(imgs_path))]
+		self.gts_list = self.gen_gts(gt_path)
+		self.img_generator = self.get_image()
 
 	def get_image(self):
-		idx = 0
-		for img_path, gt in zip((self.img_fns, self.gts)):
-			img = self.porcess_img(img_path)
-
-			# convert gt
-			gt = self.porcess_gt(gt)
+		idx = -1
+		for img_path, gt in zip(self.imgs_path_list, self.gts_list):
+			img = skimage.io.imread(img_path)
+			assert min(img.shape[:2]) >= 224
 			idx += 1
-			yield img, idx, gt
+			yield img, gt, idx
 
+
+	def gen_gts(self, gt_path):
+		"""
+		Each row in the ground-truth files represents the bounding box 
+		of the target in that frame. (tl_x, tl_y, box-width, box-height)
+		"""
+		f = open(gt_path, 'r')
+		lines = f.readlines()
+
+		try:
+			gts_list = [[int(p) for p in i[:-1].split(',')] 
+			                   for i in lines]
+		except Exception as e:
+			gts_list = [[int(p) for p in i[:-1].split('\t')] 
+			                   for i in lines]
+		return gts_list
+
+	# Deprecated method.
 	def porcess_img(img):
 		"""
 		Porcessing image required by vgg16
@@ -63,35 +67,22 @@ class InputProducer:
 		resized_img = skimage.transform.resize(crop_img, (224, 224))
 		return resized_img.reshape((1, 224, 224, 3))
 
+	# Deprecated method.
+	def img_porcess(img):
+		img = img.astype(float)
+		# conert to color image if its a grey one
+		if len(img.shape) < 3:
+			img = skimage.color.gray2rgb(img)
 
-	def porcess_gt(self, gt):
-		"""
-		Each row in the ground-truth files represents the bounding box 
-		of the target in that frame. (tl_x, tl_y, box-width, box-height)
-		"""
-		return gt
-
-
-
-
-	def 
-
-
-def static_imgs(path):
-	"""
-	Generater 
-
-	Returns:
-		img: 
-		index:
-		bbox: 
-	"""
-	pass
+		# Swap x,y order and subtract mean value
+		mean_pix = [123.68, 116.779, 103.939] # BGR
+		img = np.transpose(img, [1,0,2])
+		img[:, :, 0] -= mean_pix[0]
+		img[:, :, 1] -= mean_pix[1]
+		img[:, :, 2] -= mean_pix[2]
+		return img.reshape((1, 224, 224, 3))
 
 
-def live_video(stream):
-	"""
-	Returns:
 
-	"""
-	pass
+
+
