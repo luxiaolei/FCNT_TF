@@ -1,17 +1,11 @@
-########################################################################################
-# Davi Frossard, 2016                                                                  #
-# VGG16 implementation in TensorFlow                                                   #
-# Details:                                                                             #
-# http://www.cs.toronto.edu/~frossard/post/vgg16/                                      #
-#                                                                                      #
-# Model from https://gist.github.com/ksimonyan/211839e770f7b538e2d8#file-readme-md     #
-# Weights from Caffe converted using https://github.com/ethereon/caffe-tensorflow      #
-########################################################################################
+###############################################################################
+# Model from https://gist.github.com/ksimonyan/211839e770f7b538e2d8#file-readme-md     
+###############################################################################
 
 import tensorflow as tf
 import numpy as np
 from scipy.misc import imread, imresize
-from caffe_classes import class_names
+from imagenet_classes import class_names
 
 
 class vgg16:
@@ -249,7 +243,7 @@ class vgg16:
         weights = np.load(weight_file)
         keys = sorted(weights.keys())
         for i, k in enumerate(keys):
-            print i, k, np.shape(weights[k])
+            print(i, k, np.shape(weights[k]))
             sess.run(self.parameters[i].assign(weights[k]))
 
 if __name__ == '__main__':

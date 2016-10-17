@@ -273,10 +273,7 @@ def gen_mask(im_sz, fea_sz, roi_sz, location, l_off, s):
 	return convas
 
 
-def compute_sa
 
-
-	pass
 
 
 def IOU_eval(groud_truth_box, predicted_box):
