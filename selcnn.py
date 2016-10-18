@@ -5,7 +5,7 @@ import numpy as np
 
 from utils import variable_on_cpu, variable_with_weight_decay
 
-class selCNN:
+class SelCNN:
 	def __init__(self, scope, vgg_conv_layer):
 		"""
 		selCNN network class. Initialize graph.
@@ -28,6 +28,8 @@ class selCNN:
 		}
 		with tf.name_scope(scope) as scope:
 			self.pre_M = self._get_pre_M()
+
+		self.pre_M_size = self.pre_M.get_shape().as_list()[1:3]
 	
 
 
@@ -74,6 +76,9 @@ class selCNN:
 		with tf.variable_scope(self.scope) as scope:
 			# Root mean square loss
 			rms_loss = tf.sqrt(tf.reduce_mean(tf.square(tf.sub(gt_M, self.pre_M))))
+			# tf.squared_difference(x, y, name=None) try this! 
+			# (x-y)(x-y) 
+
 			tf.add_to_collection('losses', rms_loss)
 
 			# Use vanila SGD with exponentially decayed learning rate
@@ -96,15 +101,19 @@ class selCNN:
 			else:
 				total_losses = rms_loss
 			train_op = optimizer.minimize(total_losses, global_step=global_step)
+			self.loss = total_losses
 		return train_op, total_losses, lr, optimizer
 
-	def sel_feature_maps(self, gt_M):
+	def sel_feature_maps(self, gt_M, maps, num_sel):
 		""" Selects saliency feature maps.
 
 		Args:
 			gt_M: tensor, ground truth heat map.
+			maps: tensor, conv layer of vgg.
+			num_sel: int, number of selected maps.
 
-		Returns: list, indexs of selected feature maps of Vgg-conv layer
+		Returns:
+			sel_maps: tensor, slected vgg conv feature maps
 		"""
 
 		pass

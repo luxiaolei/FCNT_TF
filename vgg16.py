@@ -8,7 +8,7 @@ from scipy.misc import imread, imresize
 from imagenet_classes import class_names
 
 
-class vgg16:
+class Vgg16:
     def __init__(self, weights=None, sess=None):
         self.imgs = tf.placeholder(tf.float32, [None, 224, 224, 3])
 
@@ -16,8 +16,8 @@ class vgg16:
             self.convlayers()
             self.fc_layers()
             self.probs = tf.nn.softmax(self.fc3l)
-        if weights is not None and sess is not None:
-            self.load_weights(weights, sess)
+            if weights is not None and sess is not None:
+                self.load_weights(weights, sess)
     
 
     def convlayers(self):
