@@ -34,21 +34,19 @@ VGG_WEIGHTS_PATH = 'vgg16_weights.npz'
 
 
 def train_selCNN(selCNN, gt_M, feed_dict)
-	with tf.Session() as sess:
-		sess.run(tf.initialize_all_variables())
-		train_op, losses, lr, optimizer = l_selcnn.train(gt_M)
+	train_op, losses, lr, optimizer = l_selcnn.train(gt_M)
 
-		# Train for iter_step_sel times
-		# Inspects loss curve and pre_M visually
-		for step in range(FLAGS.iter_step_sel):
-			_, total_loss, pre_M, lr_ = sess.run([train_op, losses, pre_M_tensor, lr], feed_dict=feed_dict)
+	# Train for iter_step_sel times
+	# Inspects loss curve and pre_M visually
+	for step in range(FLAGS.iter_step_sel):
+		_, total_loss, pre_M, lr_ = sess.run([train_op, losses, pre_M_tensor, lr], feed_dict=feed_dict)
 
 
 def train_sgNet(gnet, snet):
 	"""
 	Train sgnet by minimize the loss
 	Loss = Lg + Ls
-	where Li = |pre_M - gt_M|**2 + Weights_decay_term
+	where Li = |pre_Mi - gt_M|**2 + Weights_decay_term_i
 
 	"""
 	for step in range(FLAGS.iter_step_sg):
@@ -64,10 +62,10 @@ img, gt, t  = next(inputProducer.gen_img)
 roi, roi_pos, preimg, pad = inputProducer.extract_roi(img, gt)
 
 # Predicts the first img.
-with tf.Session() as sess:
-	sess.run(tf.initialize_all_variables())
-	vgg = Vgg16(VGG_WEIGHTS_PATH, sess)
-	vgg.print_prob(roi, sess)
+sess = tf.Session()
+sess.run(tf.initialize_all_variables())
+vgg = Vgg16(VGG_WEIGHTS_PATH, sess)
+vgg.print_prob(roi, sess)
 
 ## At t=0. Perform the following:
 # 1. Train selCNN network for both local and gloabl feature maps
@@ -112,13 +110,11 @@ for i in range(FLAGS.iter_max):
 	feed_dict = {vgg.imgs : roi}
 
 	# Get heat map predicted by GNet
-	with tf.Session() as sess:
-		pre_M = sess.run(gnet.pre_M, feed_dict=feed_dict)
+	pre_M = sess.run(gnet.pre_M, feed_dict=feed_dict)
 
 	if i % 20 == 0:
 		# Adaptive finetunes SNet.
-		with tf.Session() as sess:
-			snet.adaptive_finetune(sess, pre_M)
+		snet.adaptive_finetune(sess, pre_M)
 
 	## Localize target 
 	tracker.draw_particles(gt_last)
@@ -129,10 +125,9 @@ for i in range(FLAGS.iter_max):
 
 		# if detects distracters, then update 
 		# SNet with descrimtive method.
-		with tf.Session() as sess:
-			sess.run(tf.initialize_all_variables())
-			snet.descrimtive_finetune(sess, pre_M)
-			pre_M = sess.run(snet.pre_M, feed_dict=feed_dict)
+		snet.descrimtive_finetune(sess, pre_M)
+		pre_M = sess.run(snet.pre_M, feed_dict=feed_dict)
+
 		# Use location predicted by SNet.
 		pre_loc = tracker.predict_location(pre_M)
 

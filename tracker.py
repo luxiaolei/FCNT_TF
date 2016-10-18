@@ -86,8 +86,6 @@ class Tracker:
 			idx: index of current frame
 		"""
 
-
-
 		# Append self.conf_records with tuple 
 		# (idx, pre_M, max(S))
 		
@@ -102,6 +100,7 @@ class Tracker:
 		# the most confident heat map. 
 
 		return updated_gt_M
+
 
 	def linear_prediction(self):
 		"""
@@ -122,10 +121,7 @@ class Tracker:
 			return True
 		else:
 			return False
-
-
-	def warp_img(self, img):
-		pass
+			
 
 	def _affgeo2loc(self):
 		"""Convert affine params to location."""
