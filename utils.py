@@ -19,7 +19,7 @@ def variable_on_cpu(scope, name, shape, initializer):
 
 	"""
 	dtype = tf.float32
-	with tf.name_scope(scope) as scope:
+	with tf.variable_scope(scope) as scope:
 		with tf.device('/cpu:0'):
 			variable = tf.get_variable(name, shape, initializer=initializer, dtype=dtype)
 	return variable
@@ -44,9 +44,8 @@ def variable_with_weight_decay(scope, name, shape, stddev=1e-3, wd=None):
 							shape,
 							initializer=tf.truncated_normal_initializer(stddev=stddev, dtype=dtype))
 	if wd is not None:
-		with tf.name_scope(scope) as scope:
-			weight_decay = tf.mul(tf.nn.l2_loss(variable), wd, name='weight_loss')
-			tf.add_to_collection('losses', weight_decay)
+		weight_decay = tf.mul(tf.nn.l2_loss(variable), wd, name='weight_loss')
+		tf.add_to_collection('losses', weight_decay)
 	return variable
 
 

@@ -71,7 +71,7 @@ class selCNN:
 			'Shapes are not compatiable! gt_M : {0}, pre_M : {1}'.format(
 				gt_shape, pre_shape)
 		
-		with tf.name_scope(self.scope) as scope:
+		with tf.variable_scope(self.scope) as scope:
 			# Root mean square loss
 			rms_loss = tf.sqrt(tf.reduce_mean(tf.square(tf.sub(gt_M, self.pre_M))))
 			tf.add_to_collection('losses', rms_loss)
