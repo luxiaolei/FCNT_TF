@@ -50,7 +50,7 @@ class SelCNN:
 		return pre_M
 
 
-	def train_op(self, gt_M, add_regulizer=True):
+	def train_op(self, gt_M, global_step, add_regulizer=True):
 		""" Train the network on the fist frame. 
 
 		Args:
@@ -84,7 +84,6 @@ class SelCNN:
 			# Use vanila SGD with exponentially decayed learning rate
 			# Decayed_learning_rate = learning_rate *
 			#                decay_rate ^ (global_step / decay_steps)
-			global_step = tf.Variable(0, trainable=False)
 			lr = tf.train.exponential_decay(
 				self.params['lr_initial'], 
 				global_step, 
