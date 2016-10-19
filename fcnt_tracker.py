@@ -76,6 +76,10 @@ def train_sgNet(sess, gnet, snet, sgt_M, ggt_M, feed_dict):
 		loss = sess.run(total_losses, feed_dict = feed_dict)
 		print(loss)
 
+def gen_mask_phi(img_sz, loc):
+	phi = np.zeros(img_sz)
+	phi[[y-int(0.5*h): y+int(0.5*h), x-int(0.5*w):x+int(0.5*w)]] = 1
+	return phi
 
 #def main(args):
 ## Instantiate inputProducer and retrive the first img
@@ -123,7 +127,7 @@ snet = SNet('SNet', s_sel_maps.shape)
 ## with feeding selected saliency maps for each networks.
 feed_dict = {gnet.input_maps: g_sel_maps, snet.input_maps: s_sel_maps}
 train_sgNet(sess, gnet, snet, sgt_M, ggt_M, feed_dict)
-
+s_sel_maps_t0 = s_sel_maps
 
 
 ## At t>0. Perform target localization and distracter detection at every frame,
@@ -168,7 +172,9 @@ for i in range(FLAGS.iter_max):
 	if tracker.distracted():
 		# if detects distracters, then update 
 		# SNet using descrimtive loss.
-		snet.descrimtive_finetune(sess, roi_t0, sgt_M, roi, pre_M)
+		# gen mask
+		phi = gen_mask_phi(roi.shape, pre_loc)
+		snet.descrimtive_finetune(sess, s_sel_maps_t0, sgt_M, roi, s_sel_maps, phi)
 		pre_M = sess.run(snet.pre_M, feed_dict=feed_dict)
 
 		# Use location predicted by SNet.

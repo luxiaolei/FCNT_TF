@@ -149,7 +149,21 @@ class SNet(SGNet, scope, vgg_conv_shape):
         sess.run(train_op)
 
 
-	def descrimtive_finetune(self, sess, pre_M, gt_last, resize_factor, t):
-        pass
+	def descrimtive_finetune(self, sess, conv4_3_t0, sgt_M, conv4_3_t, pre_M, phi):
+		# Type and shape check!
+		sgt_M = tf.constant(sgt_M, dtype=tf.float32)
+		pre_M = tf.constant(pre_M, dtype=tf.float32)
 
+		Loss_t0 = tf.reduce_sum(tf.sqrt(tf.sub(sgt_M, self.pre_M)))
+		feed_dict_t0 = {self.input_maps: conv4_3_t0}
+		train_op_t0 = SNet.optimizer.minimize(Loss_t0, var_list=self.variables)
+		
+
+		Loss_t =  tf.reduce_sum((1-phi) * tf.reduce_sum(tf.sqrt(tf.sub(pre_M, self.pre_M))))
+		feed_dict_t = {self.input_maps: conv4_3_t}
+		train_op_t = SNet.optimizer.minimize(Loss_t0, var_list=self.variables)
+		
+		for _ in range(20):
+			sess.run(train_op_t0, feed_dict_t0)
+			sess.run(train_op_t, feed_dict_t)
 		
