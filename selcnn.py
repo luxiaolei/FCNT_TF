@@ -46,7 +46,7 @@ class SelCNN:
 
 		# Subtract mean 
 		#pre_M -= tf.reduce_mean(pre_M)
-		pre_M# /= tf.reduce_max(pre_M)
+		#pre_M# /= tf.reduce_max(pre_M)
 		return pre_M
 
 
@@ -105,7 +105,14 @@ class SelCNN:
 		return train_op, total_losses, lr, optimizer
 
 	def sel_feature_maps(self, gt_M, maps, num_sel):
-		""" Selects saliency feature maps.
+		""" 
+		Selects saliency feature maps. 
+		The change of the Loss function by the permutation
+		of the feature maps dF, can be computed by a 
+		two-order Taylor expansions.
+
+		Further simplication can be done by only compute
+		the diagonol part of the Hessian matrix.
 
 		Args:
 			gt_M: tensor, ground truth heat map.

@@ -108,7 +108,7 @@ for i in range(FLAGS.iter_max):
 	img, gt_cur, t  = next(inputProducer.gen_img)
 
 	## Crop a rectangle ROI region centered at last target location.
-	roi, roi_pos, preimg, pad = inputProducer.extract_roi(img, gt_last)
+	roi, _, resize_factor = inputProducer.extract_roi(img, gt_last)
 	
 	## Perform Target localiation predicted by GNet
 	# Get heat map predicted by GNet
@@ -120,13 +120,13 @@ for i in range(FLAGS.iter_max):
 		snet.adaptive_finetune(sess, pre_M)
 
 	# Localize target use monte carlo method.
-	tracker.draw_particles(gt_last)
-	pre_loc = tracker.predict_location(pre_M)
+	tracker.draw_particles()
+	pre_loc = tracker.predict_location(pre_M, gt_last, resize_factor, t)
 
-	# Performs distracter detecion operation,
+	# Performs distracter detecion.
 	if tracker.distracted():
 		# if detects distracters, then update 
-		# SNet using descrimtive method.
+		# SNet using descrimtive loss.
 		snet.descrimtive_finetune(sess, pre_M)
 		pre_M = sess.run(snet.pre_M, feed_dict=feed_dict)
 

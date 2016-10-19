@@ -20,7 +20,7 @@ class InputProducer:
 
 		self.roi_params = {
 		'roi_size': 224, 
-		'roi_scale': 2,
+		'roi_scale': 2.5,
 		'l_off': [0,0]
 		}
 
@@ -60,6 +60,143 @@ class InputProducer:
 		return gts_list
 
 	def extract_roi(self, img, gt):
+		"""Extract ROI from img with target centered.
+
+		Returns:
+		    roi: tensor,
+		    roi_pos: list of params for roi_pos, [tlx, tly, h, w]
+
+		"""
+		roi_size  = self.roi_params['roi_size']
+		assert max(gt[2:]) <= roi_size
+
+		# Construct an padded img first.
+		convas = np.zeros([img.shape[0]+2*roi_size, img.shape[1]+2*roi_size, 3])
+		convas[roi_size:-roi_size, roi_size:-roi_size] = img
+
+		# Compute target center location in convas
+		tlx_convas, tly_convas = gt[0]+roi_size, gt[1]+roi_size
+		cx = tlx_convas + int(0.5 * gt[2])
+		cy = tly_convas + int(0.5 * gt[3])
+
+		# Crop an roi_size region centered at cx, cy
+		scale_sz = max(gt[2:]) * self.roi_params['roi_scale']
+		half = scale_sz // 2
+		roi = convas[cy-half:cy+half, cx-half:cx+half, :]
+
+		# compute new target pos in roi window
+		new_cx, new_cy = [int(i*0.5) for i in roi.shape[:-1]]
+		new_x = new_cx - gt[2] // 2
+		new_y = new_cx - gt[3] // 2
+	    
+		roi_resized = imresize(roi, (roi_size, roi_size))
+		resize_factor = roi_size / roi.shape[0]
+		return roi_resized, [new_x, new_y, gt[2], gt[3]], resize_factor
+
+
+	def gen_mask(self, fea_sz):
+		"""
+		Generates 2D guassian masked convas with shape same as 
+		fea_sz. This method should only called on the first frame.
+
+		Args:
+			img_sz: input image size.
+			fea_sz: feaure size, to be identical to the 
+				Output of sel-CNN net.
+		Returns:
+			convas: fea_sz shape with 1 channel. The central region is an 
+				2D gaussian.
+		"""
+		im_sz = self.first_img.shape
+		x, y, w, h = self.first_gt
+		convas = np.zeros(im_sz[:2])
+
+		# Generates 2D gaussian mask
+		scale = min([w,h]) / 3 # To be consistence with the paper
+		mask = gauss2d([h, w], sigma=scale)
+		print(mask.max(), 'max of mask')
+
+		# bottom right coordinate
+		x2 = x + w - 1
+		y2 = y + h - 1
+
+		# Detects wether the location has out of the img or not
+		clip = min(x, y, im_sz[0]-y2, im_sz[1]-x2)
+		pad = 0
+		if clip <= 0:
+			pad = abs(clip) + 1
+			convas = np.zeros((im_sz[0] + 2*pad, im_sz[1] + 2*pad))
+			x += pad
+			y += pad
+			x2 += pad
+			y2 += pad
+
+		# Overwrite central arear of convas with mask;
+		convas[y-1:y2, x-1:x2] = mask
+		if clip <= 0:
+			# Remove pad
+			convas = convas[pad:-pad, pad, -pad]
+
+		if len(convas.shape) < 3:
+			convas = skimage.color.gray2rgb(convas)
+		assert len(convas.shape) == 3
+
+		# Extrac ROI and resize bicubicly
+		convas, _, _  = self.extract_roi(convas, self.first_gt)
+		print(convas.shape)
+		convas = imresize(convas[...,0], fea_sz[:2], interp='bicubic')
+		print(convas.max(), 'max convas')
+
+		# Swap back, and normalize
+		convas = convas / convas.max()
+		#convas = np.transpose(convas)
+
+		return convas#[..., np.newaxis]
+
+	# Deprecated method.
+	def porcess_img(img):
+		"""
+		Porcessing image required by vgg16
+		Returns:
+		image of shape [224, 224, 3]
+		[1, height, width, depth]
+		"""
+		# load image
+		img = img / 255.0
+		assert (0 <= img).all() and (img <= 1.0).all()
+
+		# conert to color image if its a grey one
+		if len(img.shape) < 3:
+			img = skimage.color.gray2rgb(img)
+		assert len(img.shape) == 3
+
+		# crop image from center
+		short_edge = min(img.shape[:2])
+		yy = int((img.shape[0] - short_edge) / 2)
+		xx = int((img.shape[1] - short_edge) / 2)
+		crop_img = img[yy : yy + short_edge, xx : xx + short_edge]
+
+		# resize to 224, 224
+		resized_img = skimage.transform.resize(crop_img, (224, 224))
+		return resized_img.reshape((1, 224, 224, 3))
+
+	# Deprecated method.
+	def img_porcess(img):
+		img = img.astype(float)
+		# conert to color image if its a grey one
+		if len(img.shape) < 3:
+			img = skimage.color.gray2rgb(img)
+
+		# Swap x,y order and subtract mean value
+		mean_pix = [123.68, 116.779, 103.939] # BGR
+		img = np.transpose(img, [1,0,2])
+		img[:, :, 0] -= mean_pix[0]
+		img[:, :, 1] -= mean_pix[1]
+		img[:, :, 2] -= mean_pix[2]
+		return img.reshape((1, 224, 224, 3))
+
+	# Deprecated method!
+	def extract_roi_deprecated(self, img, gt):
 		"""
 		Extract Regigon of Interest 
 		"""
@@ -111,108 +248,6 @@ class InputProducer:
 		#print(roi.max(), 'roi max')
 		#roi = roi.astype(np.float32)
 		return roi, roi_pos, preimg, pad
-
-	def gen_mask(self, fea_sz):
-		"""
-		Generates 2D guassian masked convas with shape same as 
-		fea_sz. This method should only called on the first frame.
-
-		Args:
-			img_sz: input image size.
-			fea_sz: feaure size, to be identical to the 
-				Output of sel-CNN net.
-		Returns:
-			convas: fea_sz shape with 1 channel. The central region is an 
-				2D gaussian.
-		"""
-		im_sz = self.first_img.shape
-		x, y, w, h = self.first_gt
-		convas = np.zeros(im_sz[:2])
-
-		# Generates 2D gaussian mask
-		scale = min([w,h]) / 3 # To be consistence with the paper
-		mask = gauss2d([h, w], sigma=scale)
-		print(mask.max(), 'max of mask')
-
-		# bottom right coordinate
-		x2 = x + w - 1
-		y2 = y + h - 1
-
-		# Detects wether the location has out of the img or not
-		clip = min(x, y, im_sz[0]-y2, im_sz[1]-x2)
-		pad = 0
-		if clip <= 0:
-			pad = abs(clip) + 1
-			convas = np.zeros((im_sz[0] + 2*pad, im_sz[1] + 2*pad))
-			x += pad
-			y += pad
-			x2 += pad
-			y2 += pad
-
-		# Overwrite central arear of convas with mask;
-		convas[y-1:y2, x-1:x2] = mask
-		if clip <= 0:
-			# Remove pad
-			convas = convas[pad:-pad, pad, -pad]
-
-		if len(convas.shape) < 3:
-			convas = skimage.color.gray2rgb(convas)
-		assert len(convas.shape) == 3
-
-		# Extrac ROI and resize bicubicly
-		convas, _, _, _  = self.extract_roi(convas, self.first_gt)
-		print(convas.shape)
-		convas = imresize(convas[...,0], fea_sz[:2], interp='bicubic')
-		print(convas.max(), 'max convas')
-
-		# Swap back, and normalize
-		convas = convas / convas.max()
-		#convas = np.transpose(convas)
-
-
-		return convas#[..., np.newaxis]
-
-	# Deprecated method.
-	def porcess_img(img):
-		"""
-		Porcessing image required by vgg16
-		Returns:
-		image of shape [224, 224, 3]
-		[1, height, width, depth]
-		"""
-		# load image
-		img = img / 255.0
-		assert (0 <= img).all() and (img <= 1.0).all()
-
-		# conert to color image if its a grey one
-		if len(img.shape) < 3:
-			img = skimage.color.gray2rgb(img)
-		assert len(img.shape) == 3
-
-		# crop image from center
-		short_edge = min(img.shape[:2])
-		yy = int((img.shape[0] - short_edge) / 2)
-		xx = int((img.shape[1] - short_edge) / 2)
-		crop_img = img[yy : yy + short_edge, xx : xx + short_edge]
-
-		# resize to 224, 224
-		resized_img = skimage.transform.resize(crop_img, (224, 224))
-		return resized_img.reshape((1, 224, 224, 3))
-
-	# Deprecated method.
-	def img_porcess(img):
-		img = img.astype(float)
-		# conert to color image if its a grey one
-		if len(img.shape) < 3:
-			img = skimage.color.gray2rgb(img)
-
-		# Swap x,y order and subtract mean value
-		mean_pix = [123.68, 116.779, 103.939] # BGR
-		img = np.transpose(img, [1,0,2])
-		img[:, :, 0] -= mean_pix[0]
-		img[:, :, 1] -= mean_pix[1]
-		img[:, :, 2] -= mean_pix[2]
-		return img.reshape((1, 224, 224, 3))
 
 
 

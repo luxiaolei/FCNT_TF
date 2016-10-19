@@ -1,7 +1,14 @@
 
 
+from queue import Queue
 from scipy.misc import imresize
+from operator import add
 
+def compute_conf(roi, loc_p):
+	"""Helper func for computing confidence"""
+    cx,cy,w,h = loc_p
+    conf = np.sum(roi[y-int(0.5*h): y+int(0.5*h), x-int(0.5*w):x+int(0.5*w)])
+    return conf
 
 
 class Tracker:
@@ -20,11 +27,11 @@ class Tracker:
 	See 3.3.1 Dynamic model in http://www.cs.toronto.edu/~dross/ivt/RossLimLinYang_ijcv.pdf for reference
 
 	Particle filter calss"""
-	def __init__(self, init_gt_M, init_location):
+	def __init__(self, init_gt_M, init_location,):
 		
 		self.init_gt_M = init_gt_M
-		self.conf_records = queue(len=20)
-		self.last_two_location = queue(len=2)
+		self.conf_records = Queue(maxsize=20)
+		self.last_two_location = Queue(maxsize=2)
 
 		self.location = init_location
 		self.params = self._init_params(init_location)
@@ -79,7 +86,7 @@ class Tracker:
 
 
 
-	def predict_location(self, img_sz, pre_M, gt_last, t):
+	def predict_location(self, pre_M, gt_last, resize_factor, t):
 		"""
 		Predict location for each particle. It is calculated by
 		1. compute the confidence of the i-th candidate, which is 
@@ -91,14 +98,40 @@ class Tracker:
 			pre_M: predicted heat map
 			t: index of current frame
 		"""
-		# Upsampling pre_M bicubicly
-		pre_M_resized = imresize(pre_M, img_sz, interp='bicubic')
+		# transform self.aff_params_M to location_M with each column 
+		# repersent [cx, cy, w, h] in the pre_M heat map
+		loc_M = np.zeros(self.aff_params_M.shape)
+		tlx, tly, w, h = gt
+		cx, cy = roi_size // 2, roi_size // 2
+		loc_M[:, 0] = cx
+		loc_M[:, 1] = cy
+		loc_M[:, 2] = resize_factor * w 
+		loc_M[:, 3] = resize_factor * h
+		loc_M += self.aff_params_M
+		loc_M = loc_M.astype(np.int)
 
-		# Append self.conf_records with tuple 
-		# (idx, pre_M, max(S))
-		
-		self.cur_best_conf = 0
-		self.pre_location = 0
+		# Upsampling pre_M bicubicly to roi_size
+		pre_M_resized = imresize(pre_M, [roi_size, roi_size], interp='bicubic')
+
+		# Compute conf for each particle 
+		conf_lsit = []
+		for p_i_loc in loc_M:
+			conf_i = self.compute_conf(pre_M_resized, p_i_loc)
+			conf_lsit += [conf_i]
+
+		# Get index and conf score of of the most confident one
+		idx = np.argmax(conf_lsit)
+		self.cur_best_conf = conf_lsit[idx]
+
+		# Get the corresponding aff_param which is then
+		# used to predicted the cureent best location
+		best_aff =  self.aff_params_M[idx]
+		self.pre_location = self.aff2loc(gt_last, best_aff)
+
+		# Stack into records queue
+
+
+		return self.pre_location
 
 
 	def get_most_conf_M(self):
@@ -130,10 +163,19 @@ class Tracker:
 		else:
 			return False
 			
+	@classmethod
+	def compute_conf(roi, loc_p):
+		"""Helper func for computing confidence"""
+	    cx,cy,w,h = loc_p
+	    conf = np.sum(roi[y-int(0.5*h): y+int(0.5*h), x-int(0.5*w):x+int(0.5*w)])
+	    return conf
 
-	def _affgeo2loc(self):
+	@classmethod
+	def affgeo2loc(las_loc, aff_param):
 		"""Convert affine params to location."""
-		pass
+		assert len(aff_param)==4, 'This method only works for dof 4 aff space.'
+		cur_loc = map(add, las_loc, aff_param)
+		return cur_loc
 
 
 class TrackerVanilla(Tracker):
@@ -156,9 +198,6 @@ class TrackerVanilla(Tracker):
 		"""Update aff_sig param."""
 		self.params['aff_sig'] = []
 
-	def _affgeo2loc(self):
-		"""Convert affine params to location."""
-		pass
 
 	def draw_particles(self, last_location):
 		"""
