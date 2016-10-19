@@ -82,13 +82,13 @@ def train_sgNet(sess, gnet, snet, sgt_M, ggt_M, feed_dict):
 # with associated ground truth. 
 inputProducer = InputProducer(IMG_PATH, GT_PATH)
 img, gt, t  = next(inputProducer.gen_img)
-roi, _, _ = inputProducer.extract_roi(img, gt)
+roi_t0, _, _ = inputProducer.extract_roi(img, gt)
 
 # Predicts the first img.
 sess = tf.Session()
 sess.run(tf.initialize_all_variables())
 vgg = Vgg16(VGG_WEIGHTS_PATH, sess)
-vgg.print_prob(roi, sess)
+vgg.print_prob(roi_t0, sess)
 
 ## At t=0. Perform the following:
 # 1. Train selCNN network for both local and gloabl feature maps
@@ -98,46 +98,40 @@ assert t == 0:
 lselCNN = SelCNN('sel_local', vgg.conv4_3)
 gselCNN = SelCNN('sel_global', vgg.con5_3)
 
-# Gen anotaed mask for target arear
-lgt_M = inputProducer.gen_mask(lselCNN.pre_M_size)
+# Gen anotated mask for target arear
+sgt_M = inputProducer.gen_mask(lselCNN.pre_M_size)
 ggt_M = inputProducer.gen_mask(gselCNN.pre_M_size)
 
 ## Train selCNN networks with first frame roi
-# Initialize variables for selCNN 
-feed_dict = {vgg.imgs: [roi]}
-
-train_selCNN(sess, lselCNN, lgt_M, feed_dict)
+feed_dict = {vgg.imgs: [roi_t0]}
+train_selCNN(sess, lselCNN, sgt_M, feed_dict)
 train_selCNN(sess, gselCNN, ggt_M, feed_dict)
 
 # Perform saliency maps selection 
-s_sel_maps, s_idx = lselCNN.sel_feature_maps(sess, lgt_M, vgg.conv4_3, FLAGS.num_sel)
+s_sel_maps, s_idx = lselCNN.sel_feature_maps(sess, sgt_M, vgg.conv4_3, FLAGS.num_sel)
 g_sel_maps, g_idx = gselCNN.sel_feature_maps(sess, ggt_M, vgg.conv5_3, FLAGS.num_sel)
 
-assert isinstance(s_sel_maps, np.ndarry)
-assert isinstance(g_sel_maps, np.ndarry)
+assert isinstance(s_sel_maps, np.ndarray)
+assert isinstance(g_sel_maps, np.ndarray)
 assert len(s_sel_maps.shape) == 4
 
-# Instantiate G and S networks by sending selected saliency maps.
+# Instantiate G and S networks.
 gnet = GNet('GNet', s_sel_maps.shape)
 snet = SNet('SNet', s_sel_maps.shape)
 
 ## Train G and S nets by minimizing a composite loss.
-
-# Transform mask to apporatie shape
-sgt_M = lgt_M.astype(np.float32)[np.newaxis,:,:,np.newaxis]
-ggt_M = ggt_M.astype(np.float32)[np.newaxis,:,:,np.newaxis]
-
-# trainning sgNets
+## with feeding selected saliency maps for each networks.
 feed_dict = {gnet.input_maps: g_sel_maps, snet.input_maps: s_sel_maps}
 train_sgNet(sess, gnet, snet, sgt_M, ggt_M, feed_dict)
+
 
 
 ## At t>0. Perform target localization and distracter detection at every frame,
 ## perform SNget adaptive update every 20 frames, perform SNet discrimtive 
 ## update if distracter detection return True.
 
-# Instantiate Tracker object and initialize it with lgt_M.
-tracker = TrackerVanilla(lgt_M, gt)
+# Instantiate Tracker object and initialize it with sgt_M.
+tracker = TrackerVanilla(sgt_M, gt)
 
 # Iter imgs
 gt_last = gt 
@@ -152,15 +146,19 @@ for i in range(FLAGS.iter_max):
 	# Get heat map predicted by GNet
 	feed_dict_vgg = {vgg.imgs : [roi]}
 	s_maps, g_maps = sess.run([vgg.conv4_3, vgg.conv5_3], feed_dict=feed_dict_vgg)
-	s_sel_maps = s_maps[s_idx]
+	s_sel_maps = s_maps[s_idx] # np.ndarray, shape = [1,28,28,num_sel]?
 	g_sel_maps = g_maps[g_idx]
 
-	feed_dic_g = { : g_sel_maps}
+	feed_dict_g = { gnet.input_maps: g_sel_maps}
 	pre_M = sess.run(gnet.pre_M, feed_dict=feed_dict_g)
+	tracker.pre_M_q.push(pre_M)
 
 	if i % 20 == 0:
-		# Use predicted heat map to adaptive finetune SNet.
-		snet.adaptive_finetune(sess, pre_M)
+		# Retrive the most confident result within the intervening frames
+		best_M = tracker.gen_best_M()
+
+		# Use the best predicted heat map to adaptive finetune SNet.
+		snet.adaptive_finetune(sess, best_M)
 
 	# Localize target with monte carlo sampling.
 	tracker.draw_particles()
@@ -170,7 +168,7 @@ for i in range(FLAGS.iter_max):
 	if tracker.distracted():
 		# if detects distracters, then update 
 		# SNet using descrimtive loss.
-		snet.descrimtive_finetune(sess, pre_M)
+		snet.descrimtive_finetune(sess, roi_t0, sgt_M, roi, pre_M)
 		pre_M = sess.run(snet.pre_M, feed_dict=feed_dict)
 
 		# Use location predicted by SNet.

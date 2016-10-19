@@ -2,6 +2,8 @@
 import tensorflow as tf
 import numpy as np 
 
+from scipy.misc import imresize
+
 from utils import variable_on_cpu, variable_with_weight_decay
 
 
@@ -9,7 +11,7 @@ class SGNet:
 
 	# Define class level optimizer
 	lr = 1e-6
-	optimizer = tf.train.GradientDescentOptimizer(lr)
+	#optimizer = tf.train.GradientDescentOptimizer(lr)
 
     def __init__(self, scope, vgg_conv_shape):
         """
@@ -42,6 +44,7 @@ class SGNet:
         self.variables = []
         self.kernel_weights = []
         out_num = vgg_conv_shape[-1]
+
         self.input_maps = tf.placeholder(tf.float32, shape=vgg_conv_shape,
             name='selected_maps')
         #assert vgg_conv_shape[-1] == self.params['num_fms']
@@ -85,6 +88,16 @@ class SGNet:
         """
 
         # Assertion
+        assert isinstance(gt_M, np.ndarray):
+        if len(gt_M) == 2:
+            # gt_M is a 2D mask
+            gt_M = tf.constant(gt_M.reshape((1,gt_M.shape[0], gt_M.shape[1], 1)), dtype=tf.float32)
+        elif: len(gt_M) == 4:
+            # gt_M is SGNet.pre_M
+            gt_M = tf.constant(gt_M, dtype=tf.float32)
+        else:
+            print('Unhandled input shape: %s'%gt_M.shape)
+
         with tf.name_scope(self.scope) as scope:
             beta = tf.constant(self.params['wd'], name='beta')
             loss_rms = tf.reduce_mean(tf.square(tf.sub(gt_M, self.pre_M))) 
@@ -97,7 +110,7 @@ class SGNet:
 	def eadge_RP():
 		"""
 		This method propose a series of ROI along eadges
-		of a given frame. This should be called when particle 
+		for a given frame. This should be called when particle 
 		confidence below a critical value, which possibly accounts
 		for object re-appearance.
 		"""
@@ -118,18 +131,25 @@ class GNet(SGNet):
 
 
 class SNet(SGNet, scope, vgg_conv_shape):
+    lr = 1e-8
+    optimizer = tf.train.GradientDescentOptimizer(lr)
 	def __init__(self):
 		"""
 		Initialized in the first frame
 		"""
 		super(SNet, self).__init__(scope, vgg_conv_shape)
 
-	def adaptive_finetune(self, sess, updated_gt_M):
-		"""Finetune SNet with updated_gt_M."""
+	def adaptive_finetune(self, sess, best_M):
+		"""Finetune SNet with best pre_M predicetd by gNet."""
+        # Upsampling best_M 
+        #bres_M_resized = imresize(best_M, [1, 28, 28, 1], interp='bicubic')
+        #bres_M_resized = tf.constant(bres_M_resized, dtype=tf.float32)
+		loss = self.loss(best_M)
+        train_op = SNet.optimizer.minimize(loss, var_list=self.variables)
+        sess.run(train_op)
 
-		pass
 
-	def descrimtive_finetune(self, sess, init_gt_M, cur_):
-		pass
+	def descrimtive_finetune(self, sess, pre_M, gt_last, resize_factor, t):
+        pass
 
 		
