@@ -1,6 +1,6 @@
 
 
-
+from scipy.misc import imresize
 
 
 
@@ -43,48 +43,56 @@ class Tracker:
 		return params
 
 
-	def _gen_affine_M(self, aff_params):
+	def draw_particles(self):
 		"""
 		Generates particles according to 
 		P(Xt|Xt−1) = N (Xt; Xt−1, Ψ)
 
 		Args:
-			aff_params: [cx, cy, w/p_sz, 0, h/w, 0],
-				affine parameters, see class doc string for 
+			aff_params: affine parameters, see class doc string for 
 				specific element definition.
-
+				[cx, cy, w/p_sz, 0, h/w, 0] for 6 degrees of freendom
+				[tlx, tly, w, h] for 4 degrees of freedom.
+				.
 		Returns:
-			aff_params_M : 6 * self.p_num size matrix,
+			aff_params_M : self.p_num*dof size matrix,
 				where rows are updated randomly drawed affine 
 				params, columns repersent each particles. 
 		"""
-		# Construct an 6*p_num size matrix with with each 
-		# column repersents one particle
-		aff_params_M = np.kron(np.ones((self.params['p_num'],1)), np.array(aff_params)).T
+		# Define degrees of freedom 
+		dof = len(self.params['aff_sig'])
 
-		# First onstruct a 6*p_num size normal distribution with 
+		# Construct an p_num*6 size matrix with with each 
+		# column repersents one particle
+
+		#aff_params_M = np.kron(np.ones((self.params['p_num'],1)), np.array(aff_params))
+
+		# First onstruct a p_num*dof size normal distribution with 
 		# mean 0 and sigma 1
-		rand_norml_M = np.array([np.random.standard_normal(6) for _ in range(self.params['p_num'])]).T
+		rand_norml_M = np.array([np.random.standard_normal(dof) for _ in range(self.params['p_num'])])
 
 		# Then construct a affine sigma matrix
-		aff_sig_M = np.kron(np.ones((p_num, 1)), self.params['aff_sig']).T
+		aff_sig_M = np.kron(np.ones((self.params['p_num'], 1)), self.params['aff_sig'])
 
 		# Update particles 
-		aff_params_M += rand_norml_M * aff_sig_M
-
-		return aff_params_M
-
-	def draw_particles(self, aff_params):
-		pass
+		self.aff_params_M = rand_norml_M * aff_sig_M
 
 
-	def predict_location(self):
-		"""Predict location for each particle.
-		
-		Args:
-			pre_M: predicted heat map
-			idx: index of current frame
+
+	def predict_location(self, img_sz, pre_M, gt_last, t):
 		"""
+		Predict location for each particle. It is calculated by
+		1. compute the confidence of the i-th candidate, which is 
+			the summation of all the heatmap values within the candidate region.
+		2. the candidate with the highest confidence value is predicted as target.
+
+		Args:
+			img_siz: tuple(image height, image width)
+			pre_M: predicted heat map
+			t: index of current frame
+		"""
+		# Upsampling pre_M bicubicly
+		pre_M_resized = imresize(pre_M, img_sz, interp='bicubic')
 
 		# Append self.conf_records with tuple 
 		# (idx, pre_M, max(S))
@@ -129,10 +137,24 @@ class Tracker:
 
 
 class TrackerVanilla(Tracker):
-	"""Vanilla tracker"""
+	"""Vanilla tracker
+
+		The covariance matrix has only 4 degrees of freedom,
+		specified by vertical, horizontal translation of the central
+		point, variance of the width, variance of the w/h ratio.
+
+		The corrresponding actual senarios are object replacment,
+		object zoom in/out, object rotaion. Should be sufficient 
+		for most cases of car tracking.
+
+	"""
 	def __init__(self, init_location):
 		super(TrackerVanilla, self).__init__(init_location)
-		self.arg = arg
+		self._update_params()
+
+	def _update_params(self):
+		"""Update aff_sig param."""
+		self.params['aff_sig'] = []
 
 	def _affgeo2loc(self):
 		"""Convert affine params to location."""

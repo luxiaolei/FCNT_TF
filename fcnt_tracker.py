@@ -106,30 +106,35 @@ gt_last = gt
 for i in range(FLAGS.iter_max):
 	# Gnerates next frame infos
 	img, gt_cur, t  = next(inputProducer.gen_img)
-	roi, roi_pos, preimg, pad = inputProducer.extract_roi(img, gt_cur)
-	feed_dict = {vgg.imgs : roi}
 
+	## Crop a rectangle ROI region centered at last target location.
+	roi, roi_pos, preimg, pad = inputProducer.extract_roi(img, gt_last)
+	
+	## Perform Target localiation predicted by GNet
 	# Get heat map predicted by GNet
+	feed_dict = {vgg.imgs : roi}
 	pre_M = sess.run(gnet.pre_M, feed_dict=feed_dict)
 
 	if i % 20 == 0:
-		# Adaptive finetunes SNet.
+		# Use predicted heat map to adaptive finetune SNet.
 		snet.adaptive_finetune(sess, pre_M)
 
-	## Localize target 
+	# Localize target use monte carlo method.
 	tracker.draw_particles(gt_last)
 	pre_loc = tracker.predict_location(pre_M)
 
 	# Performs distracter detecion operation,
 	if tracker.distracted():
-
 		# if detects distracters, then update 
-		# SNet with descrimtive method.
+		# SNet using descrimtive method.
 		snet.descrimtive_finetune(sess, pre_M)
 		pre_M = sess.run(snet.pre_M, feed_dict=feed_dict)
 
 		# Use location predicted by SNet.
 		pre_loc = tracker.predict_location(pre_M)
+	
+	# Set predicted location to be the next frame's ground truth
+	gt_last = pre_loc
 
 	# Draw bbox on image. And print associated IoU score.
 	img_with_bbox(img, pre_loc, gt_cur)
