@@ -18,6 +18,7 @@ class SelCNN:
 		# Initialize network
 		self.scope = scope
 		self.input_layer = vgg_conv_layer
+		self.paramters = []
 		self.params = {
 		'dropout_rate': 0.3,
 		'k_size': [3, 3, 512, 1],
@@ -28,9 +29,8 @@ class SelCNN:
 		}
 		with tf.name_scope(scope) as scope:
 			self.pre_M = self._get_pre_M()
-
 		self.pre_M_size = self.pre_M.get_shape().as_list()[1:3]
-	
+		
 
 
 	def _get_pre_M(self):
@@ -43,14 +43,14 @@ class SelCNN:
 		conv = tf.nn.conv2d(dropout_layer, kernel, [1,1,1,1], 'SAME')
 		bias = variable_on_cpu(self.scope,'biases', [1], tf.constant_initializer(0.1))
 		pre_M = tf.nn.bias_add(conv, bias)
-
+		self.paramters += [kernel, bias]
 		# Subtract mean 
 		#pre_M -= tf.reduce_mean(pre_M)
 		#pre_M# /= tf.reduce_max(pre_M)
 		return pre_M
 
 
-	def train(self, gt_M, add_regulizer=True):
+	def train_op(self, gt_M, add_regulizer=True):
 		""" Train the network on the fist frame. 
 
 		Args:
@@ -100,11 +100,11 @@ class SelCNN:
 				total_losses = tf.add_n(tf.get_collection(tf.GraphKeys.LOSSES), 'total_losses')
 			else:
 				total_losses = rms_loss
-			train_op = optimizer.minimize(total_losses, global_step=global_step)
+			train_op = optimizer.minimize(total_losses, var_list = self.paramters, global_step=global_step)
 			self.loss = total_losses
 		return train_op, total_losses, lr, optimizer
 
-	def sel_feature_maps(self, gt_M, maps, num_sel):
+	def sel_feature_maps(self, sess, gt_M, vgg_maps, num_sel):
 		""" 
 		Selects saliency feature maps. 
 		The change of the Loss function by the permutation

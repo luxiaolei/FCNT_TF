@@ -1,8 +1,6 @@
 """
 Main script for FCNT tracker. 
 """
-import numpy as np 
-import tensorflow tf
 
 # Import custom class and functions
 from inputproducer import InputProducer
@@ -11,6 +9,11 @@ from vgg16 import Vgg16
 from selcnn import SelCNN
 from sgnet import GNet, SNet
 from utils import img_with_bbox, IOU_eval
+
+import numpy as np 
+import tensorflow as tf
+
+import os
 
 
 tf.app.flags.DEFINE_integer('iter_step_sel', 200,
@@ -33,16 +36,17 @@ GT_PATH = os.path.join(DATA_ROOT, 'groundtruth_rect.txt')
 VGG_WEIGHTS_PATH = 'vgg16_weights.npz'
 
 
-def train_selCNN(selCNN, gt_M, feed_dict)
-	train_op, losses, lr, optimizer = l_selcnn.train(gt_M)
+def train_selCNN(sess, selCNN, gt_M, feed_dict):
+	train_op, losses, lr, optimizer = selCNN.train_op(gt_M)
 
 	# Train for iter_step_sel times
 	# Inspects loss curve and pre_M visually
 	for step in range(FLAGS.iter_step_sel):
-		_, total_loss, pre_M, lr_ = sess.run([train_op, losses, pre_M_tensor, lr], feed_dict=feed_dict)
+		_, total_loss, lr_ = sess.run([train_op, losses, lr], feed_dict=feed_dict)
+		print(total_loss)
 
 
-def train_sgNet(gnet, snet):
+def train_sgNet(sess, gnet, snet):
 	"""
 	Train sgnet by minimize the loss
 	Loss = Lg + Ls
@@ -59,7 +63,7 @@ def train_sgNet(gnet, snet):
 # with associated ground truth. 
 inputProducer = InputProducer(IMG_PATH, GT_PATH)
 img, gt, t  = next(inputProducer.gen_img)
-roi, roi_pos, preimg, pad = inputProducer.extract_roi(img, gt)
+roi, _, _ = inputProducer.extract_roi(img, gt)
 
 # Predicts the first img.
 sess = tf.Session()
@@ -79,20 +83,23 @@ lgt_M = inputProducer.gen_mask(lselCNN.pre_M_size)
 ggt_M = inputProducer.gen_mask(gselCNN.pre_M_size)
 
 # Train selCNN networks with first frame roi
-feed_dict = {vgg.imgs: roi}
+sess.run(tf.initialize_all_variables()) # Initialize variables for selCNN 
+feed_dict = {vgg.imgs: [roi]}
 train_selCNN(lselCNN, lgt_M, feed_dict)
 train_selCNN(gselCNN, ggt_M, feed_dict)
 
 # Perform saliency maps selection 
-s_sel_maps = lselCNN.sel_feature_maps(lgt_M, vgg.conv4_3, FLAGS.num_sel)
-g_sel_maps = gselCNN.sel_feature_maps(ggt_M, vgg.conv5_3, FLAGS.num_sel)
+s_sel_maps, s_idx = lselCNN.sel_feature_maps(sess, lgt_M, vgg.conv4_3, FLAGS.num_sel)
+g_sel_maps, g_idx = gselCNN.sel_feature_maps(sess, ggt_M, vgg.conv5_3, FLAGS.num_sel)
 
 # Instantiate G and S networks by sending selected saliency maps.
-gnet = GNet('GNet', g_sel_maps)
-snet = SNet('SNet', s_sel_maps)
+g_sel_maps_sz = 
+s_sel_maps_sz = 
+gnet = GNet('GNet', g_sel_maps_sz)
+snet = SNet('SNet', s_sel_maps_sz)
 
 # Train G and S nets by minimizing a composite loss.
-train_sgNet(gnet, snet)
+train_sgNet(sess, gnet, snet, s_sel_maps, g_sel_maps)
 
 ## At t>0. Perform target localization and distracter detection at every frame,
 ## perform SNget adaptive update every 20 frames, perform SNet discrimtive 
@@ -112,14 +119,19 @@ for i in range(FLAGS.iter_max):
 	
 	## Perform Target localiation predicted by GNet
 	# Get heat map predicted by GNet
-	feed_dict = {vgg.imgs : roi}
-	pre_M = sess.run(gnet.pre_M, feed_dict=feed_dict)
+	feed_dict_vgg = {vgg.imgs : roi}
+	s_maps, g_maps = sess.run([vgg.conv4_3, vgg.conv5_3], feed_dict=feed_dict_vgg)
+	s_sel_maps = s_maps[s_idx]
+	g_sel_maps = g_maps[g_idx]
+
+	feed_dic_g = { : g_sel_maps}
+	pre_M = sess.run(gnet.pre_M, feed_dict=feed_dict_g)
 
 	if i % 20 == 0:
 		# Use predicted heat map to adaptive finetune SNet.
 		snet.adaptive_finetune(sess, pre_M)
 
-	# Localize target use monte carlo method.
+	# Localize target with monte carlo sampling.
 	tracker.draw_particles()
 	pre_loc = tracker.predict_location(pre_M, gt_last, resize_factor, t)
 

@@ -20,7 +20,7 @@ class SGNet:
 		'num_fms': 200, # number of selected featrue maps, inputs of the network
 		'wd': 0.5, # L2 regulization coefficient
 		}
-		with tf.name_scope(scope) as scope:
+		with tf.variable_scope(scope) as scope:
 			self.pre_M = self._build_graph(feature_maps)
 		
 	def _build_graph(self, feature_maps):
