@@ -18,7 +18,7 @@ class SelCNN:
 		# Initialize network
 		self.scope = scope
 		self.input_layer = vgg_conv_layer
-		self.paramters = []
+		self.variables = []
 		self.params = {
 		'dropout_rate': 0.3,
 		'k_size': [3, 3, 512, 1],
@@ -43,7 +43,7 @@ class SelCNN:
 		conv = tf.nn.conv2d(dropout_layer, kernel, [1,1,1,1], 'SAME')
 		bias = variable_on_cpu(self.scope,'biases', [1], tf.constant_initializer(0.1))
 		pre_M = tf.nn.bias_add(conv, bias)
-		self.paramters += [kernel, bias]
+		self.variables += [kernel, bias]
 		# Subtract mean 
 		#pre_M -= tf.reduce_mean(pre_M)
 		#pre_M# /= tf.reduce_max(pre_M)
@@ -73,34 +73,34 @@ class SelCNN:
 			'Shapes are not compatiable! gt_M : {0}, pre_M : {1}'.format(
 				gt_shape, pre_shape)
 		
-		with tf.variable_scope(self.scope) as scope:
-			# Root mean square loss
-			rms_loss = tf.sqrt(tf.reduce_mean(tf.square(tf.sub(gt_M, self.pre_M))))
-			# tf.squared_difference(x, y, name=None) try this! 
-			# (x-y)(x-y) 
+		#with tf.variable_scope(self.scope) as scope:
+		# Root mean square loss
+		rms_loss = tf.sqrt(tf.reduce_mean(tf.square(tf.sub(gt_M, self.pre_M))))
+		# tf.squared_difference(x, y, name=None) try this! 
+		# (x-y)(x-y) 
 
-			tf.add_to_collection('losses', rms_loss)
+		tf.add_to_collection('losses', rms_loss)
 
-			# Use vanila SGD with exponentially decayed learning rate
-			# Decayed_learning_rate = learning_rate *
-			#                decay_rate ^ (global_step / decay_steps)
-			lr = tf.train.exponential_decay(
-				self.params['lr_initial'], 
-				global_step, 
-				self.params['lr_decay_steps'], 
-				self.params['lr_decay_rate'] , 
-				name='lr')
+		# Use vanila SGD with exponentially decayed learning rate
+		# Decayed_learning_rate = learning_rate *
+		#                decay_rate ^ (global_step / decay_steps)
+		lr = tf.train.exponential_decay(
+			self.params['lr_initial'], 
+			global_step, 
+			self.params['lr_decay_steps'], 
+			self.params['lr_decay_rate'] , 
+			name='lr')
 
-			# Vanilia SGD with dexp decay learning rate
-			optimizer = tf.train.GradientDescentOptimizer(lr)
+		# Vanilia SGD with dexp decay learning rate
+		optimizer = tf.train.GradientDescentOptimizer(lr)
 
-			if add_regulizer:
-				# Add L2 regularzer losses
-				total_losses = tf.add_n(tf.get_collection(tf.GraphKeys.LOSSES), 'total_losses')
-			else:
-				total_losses = rms_loss
-			train_op = optimizer.minimize(total_losses, var_list = self.paramters, global_step=global_step)
-			self.loss = total_losses
+		if add_regulizer:
+			# Add L2 regularzer losses
+			total_losses = tf.add_n(tf.get_collection(tf.GraphKeys.LOSSES), 'total_losses')
+		else:
+			total_losses = rms_loss
+		train_op = optimizer.minimize(total_losses, var_list = self.variables, global_step=global_step)
+		self.loss = total_losses
 		return train_op, total_losses, lr, optimizer
 
 	def sel_feature_maps(self, sess, gt_M, vgg_maps, num_sel):
@@ -115,11 +115,12 @@ class SelCNN:
 
 		Args:
 			gt_M: tensor, ground truth heat map.
-			maps: tensor, conv layer of vgg.
+			sel_maps: tensor, conv layer of vgg.
 			num_sel: int, number of selected maps.
 
 		Returns:
-			sel_maps: tensor, slected vgg conv feature maps
+			sel_maps: np.ndarray, conv layer of vgg.
+			idx: list, indexes of selected maps
 		"""
 
 		pass

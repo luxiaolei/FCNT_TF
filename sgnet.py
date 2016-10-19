@@ -8,83 +8,90 @@ from utils import variable_on_cpu, variable_with_weight_decay
 class SGNet:
 
 	# Define class level optimizer
-	lr = 
-	optimizer = 
+	lr = 1e-6
+	optimizer = tf.train.GradientDescentOptimizer(lr)
 
-	def __init__(self, scope, feature_maps):
-		"""
-		Base calss for SGNet, defines the network structure
-		"""
-		self.scope = scope
-		self.params = {
-		'num_fms': 200, # number of selected featrue maps, inputs of the network
-		'wd': 0.5, # L2 regulization coefficient
-		}
-		with tf.variable_scope(scope) as scope:
-			self.pre_M = self._build_graph(feature_maps)
-		
-	def _build_graph(self, feature_maps):
-		"""
-		Define Structure. 
-		The first additional convolutional
-		layer has convolutional kernels of size 9×9 and outputs
-		36 feature maps as the input to the next layer. The second
-		additional convolutional layer has kernels of size 5 × 5
-		and outputs the foreground heat map of the input image.
-		ReLU is chosen as the nonlinearity for these two layers.
+    def __init__(self, scope, vgg_conv_shape):
+        """
+        Base calss for SGNet, defines the network structure
+        """
+        self.scope = scope
+        self.params = {
+        'num_fms': 200, # number of selected featrue maps, inputs of the network
+        'wd': 0.5, # L2 regulization coefficient
+        }
+        self.variables = []
+        with tf.variable_scope(scope) as scope:
+            self.pre_M = self._build_graph(vgg_conv_shape)
 
-		Args:
-			feature_maps: 
-		Returns:
-			conv2: 
-		"""
-		self.paramters = []
-		self.kernel_weights = []
-		assert isinstant(feature_maps, tf.Tensor)
-		assert feature_maps.get_shape().as_list()[-1] == self.params['num_fms']
+    def _build_graph(self, vgg_conv_shape):
+        """
+        Define Structure. 
+        The first additional convolutional
+        layer has convolutional kernels of size 9×9 and outputs
+        36 feature maps as the input to the next layer. The second
+        additional convolutional layer has kernels of size 5 × 5
+        and outputs the foreground heat map of the input image.
+        ReLU is chosen as the nonlinearity for these two layers.
 
-		with tf.variable_scope('Conv1') as scope:
-			kernel = variable_with_weight_decay('kernel', 
-				[9,9,self.params['num_fms'],36], wd = None)
-			conv = tf.nn.conv2d(feature_maps, kernel, [1,1,1,1], 'SAME')
-			bias = variable_on_cpu('biases', [1], tf.constant_initializer(0.1))
-			out = tf.nn.bias_add(conv, bias)
-			conv1 = tf.nn.relu(out, name=scope)
-			self.paramters += [kernel, bias]
-			self.kernel_weights += [kernel]
+        Args:
+            vgg_conv_shape: 
+        Returns:
+            conv2: 
+        """
+        self.variables = []
+        self.kernel_weights = []
+        out_num = vgg_conv_shape[-1]
+        self.input_maps = tf.placeholder(tf.float32, shape=vgg_conv_shape,
+            name='selected_maps')
+        #assert vgg_conv_shape[-1] == self.params['num_fms']
+        
+        with tf.name_scope('conv1') as scope:
+            kernel = tf.Variable(tf.truncated_normal([9,9,out_num,36], dtype=tf.float32,
+                                                     stddev=1e-1), name='weights')
+            conv = tf.nn.conv2d(self.input_maps, kernel, [1, 1, 1, 1], padding='SAME')
+            biases = tf.Variable(tf.constant(0.0, shape=[36], dtype=tf.float32),
+                                 trainable=True, name='biases')
+            out = tf.nn.bias_add(conv, biases)
+            conv1 = tf.nn.relu(out, name=scope)
+            self.variables += [kernel, biases]
+            self.kernel_weights += [kernel]
+            print(conv1.get_shape().as_list(), 'conv1 shape')
 
 
-		with tf.variable_scope('Conv2') as scope:
-			kernel = variable_with_weight_decay('kernel', 
-				[5,5,36,1], wd = None)
-			conv = tf.nn.conv2d(conv1, kernel, [1,1,1,1], 'SAME')
-			bias = variable_on_cpu('biases', [1], tf.constant_initializer(0.1))
-			out = tf.nn.bias_add(conv, bias)
-			conv2 = tf.nn.relu(out, name=scope)
-			self.paramters += [kernel, bias]
-			self.kernel_weights += [kernel]
+        with tf.name_scope('conv2') as scope:
+            kernel = tf.Variable(tf.truncated_normal([5,5,36,1], dtype=tf.float32,
+                                                     stddev=1e-1), name='weights')
+            conv = tf.nn.conv2d(conv1, kernel , [1, 1, 1, 1], padding='SAME')
+            print(conv.get_shape().as_list(), 'conv shape')
+            biases = tf.Variable(tf.constant(0.0, shape=[1], dtype=tf.float32),
+                                 trainable=True, name='biases')
+            out = tf.nn.bias_add(conv, biases)
+            conv2 = tf.nn.relu(out, name=scope)
+            self.variables += [kernel, biases]
+            self.kernel_weights += [kernel]
 
-		print('Shape of the out put heat map for %s is %s'%(self.scope, conv2.get_shape().as_list()))
-		return conv2
+        print('Shape of the out put heat map for %s is %s'%(self.scope, conv2.get_shape().as_list()))
+        return conv2
 
-	def loss(self, gt_M):
-		"""Returns Losses for the current network.
+    def loss(self, gt_M):
+        """Returns Losses for the current network.
 
-		Args:
-			gt_M: Tensor, ground truth heat map.
+        Args:
+            gt_M: Tensor, ground truth heat map.
 
-		Returns:
-			Loss: 
-		"""
+        Returns:
+            Loss: 
+        """
 
-		# Assertion
-		with tf.name_scope(self.scope) as scope:
-
-			#
-			Loss = tf.reduce_sum(gt_M, self.pre_M) + \
-				 self.params['wd'] * tf.pow(tf.reduce_sum(self.kernel_weights))
-
-		return Loss
+        # Assertion
+        with tf.name_scope(self.scope) as scope:
+            beta = tf.constant(self.params['wd'], name='beta')
+            loss_rms = tf.reduce_mean(tf.square(tf.sub(gt_M, self.pre_M))) 
+            loss_wd = [tf.reduce_mean(tf.square(w)) for w in self.kernel_weights]
+            loss_wd = beta * tf.add_n(loss_wd)
+            total_loss = loss_rms + loss_wd
+        return total_loss
 
 	@classmethod
 	def eadge_RP():
@@ -99,23 +106,23 @@ class SGNet:
 
 
 class GNet(SGNet):
-	def __init__(self, scope, feature_maps):
+	def __init__(self, scope, vgg_conv_shape):
 		"""
 		Fixed params once trained in the first frame
 		"""
-		super(GNet, self).__init__(scope, feature_maps)
+		super(GNet, self).__init__(scope, vgg_conv_shape)
 
 
 
 
 
 
-class SNet(SGNet):
+class SNet(SGNet, scope, vgg_conv_shape):
 	def __init__(self):
 		"""
 		Initialized in the first frame
 		"""
-		super(SNet, self).__init__(scope, feature_maps)
+		super(SNet, self).__init__(scope, vgg_conv_shape)
 
 	def adaptive_finetune(self, sess, updated_gt_M):
 		"""Finetune SNet with updated_gt_M."""
