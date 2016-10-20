@@ -127,9 +127,6 @@ class GNet(SGNet):
 
 
 
-
-
-
 class SNet(SGNet, scope, vgg_conv_shape):
     lr = 1e-8
     optimizer = tf.train.GradientDescentOptimizer(lr)

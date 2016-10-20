@@ -36,7 +36,7 @@ GT_PATH = os.path.join(DATA_ROOT, 'groundtruth_rect.txt')
 VGG_WEIGHTS_PATH = 'vgg16_weights.npz'
 
 
-def train_selCNN(sess, selCNN, gt_M, feed_dict):
+def train_selCNN(sess, selCNN, gt_M_sz, feed_dict):
 	# Initialize variables
 	global_step = tf.Variable(0, trainable=False)
 	selCNN_vars = selCNN.variables 
@@ -44,7 +44,7 @@ def train_selCNN(sess, selCNN, gt_M, feed_dict):
 	sess.run(init_vars_op)
 
 	# Retrive trainning op
-	train_op, losses, lr, optimizer = selCNN.train_op(gt_M, global_step)
+	train_op, losses, lr, optimizer = selCNN.train_op(gt_M_sz, global_step)
 	print(sess.run(tf.report_uninitialized_variables()))
 	# Train for iter_step_sel times
 	# Inspects loss curve and pre_M visually
@@ -73,10 +73,13 @@ def train_sgNet(sess, gnet, snet, sgt_M, ggt_M, feed_dict):
 	train_op = optimizer.minimize(total_losses, var_list= sgNet_vars)
 
 	for step in range(FLAGS.iter_step_sg):
-		loss = sess.run(total_losses, feed_dict = feed_dict)
+		loss, _ = sess.run([total_losses, train_op], feed_dict = feed_dict)
 		print(loss)
 
+
+
 def gen_mask_phi(img_sz, loc):
+	x,y,w,h = loc
 	phi = np.zeros(img_sz)
 	phi[[y-int(0.5*h): y+int(0.5*h), x-int(0.5*w):x+int(0.5*w)]] = 1
 	return phi
@@ -108,13 +111,20 @@ def main(args):
 	ggt_M = inputProducer.gen_mask(gselCNN.pre_M_size)
 
 	## Train selCNN networks with first frame roi
-	feed_dict = {vgg.imgs: [roi_t0]}
-	train_selCNN(sess, lselCNN, sgt_M, feed_dict)
-	train_selCNN(sess, gselCNN, ggt_M, feed_dict)
+	# reshape gt_M for compatabilities
+	sgt_M = sgt_M[np.newaxis,:,:,np.newaxis]
+	ggt_M = ggt_M[np.newaxis,:,:,np.newaxis]
+
+	feed_dict = {vgg.imgs: [roi_t0], 
+				lselCNN.gt_M: sgt_M,
+				gselCNN.gt_M: ggt_M} # corrpus the other nets?
+
+	train_selCNN(sess, lselCNN, sgt_M.shape, feed_dict)
+	train_selCNN(sess, gselCNN, ggt_M.shape, feed_dict)
 
 	# Perform saliency maps selection 
-	s_sel_maps, s_idx = lselCNN.sel_feature_maps(sess, sgt_M, vgg.conv4_3, FLAGS.num_sel)
-	g_sel_maps, g_idx = gselCNN.sel_feature_maps(sess, ggt_M, vgg.conv5_3, FLAGS.num_sel)
+	s_sel_maps, s_idx = lselCNN.sel_feature_maps(sess, vgg.conv4_3, feed_dict,FLAGS.num_sel)
+	g_sel_maps, g_idx = gselCNN.sel_feature_maps(sess, vgg.conv5_3, feed_dict,FLAGS.num_sel)
 
 	assert isinstance(s_sel_maps, np.ndarray)
 	assert isinstance(g_sel_maps, np.ndarray)

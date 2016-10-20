@@ -18,6 +18,9 @@ class SelCNN:
 		# Initialize network
 		self.scope = scope
 		self.input_layer = vgg_conv_layer
+
+		# Unpack vgg_conv_layer for partial derivatives
+		self.feature_maps = [vgg_conv_layer[...,i] for i in range(512)]
 		self.variables = []
 		self.params = {
 		'dropout_rate': 0.3,
@@ -35,7 +38,8 @@ class SelCNN:
 
 	def _get_pre_M(self):
 		"""Build the sel-CNN graph and returns predicted Heat map."""
-		dropout_layer = tf.nn.dropout(self.input_layer, self.params['dropout_rate'])
+		input_maps = tf.pack(self.feature_maps, axis=-1)
+		dropout_layer = tf.nn.dropout(input_maps, self.params['dropout_rate'])
 
 		# Conv layer with bias 
 		kernel = variable_with_weight_decay(self.scope, 'kernel',\
@@ -50,11 +54,11 @@ class SelCNN:
 		return pre_M
 
 
-	def train_op(self, gt_M, global_step, add_regulizer=True):
+	def train_op(self, gt_M_sz, global_step, add_regulizer=True):
 		""" Train the network on the fist frame. 
 
 		Args:
-			gt_M: tensor with shape identical to self.pre_M,
+			gt_M_sz: tuple, shape identical to self.pre_M,
 				Ground truth heatmap.
 			add_regulizer: bool, True for adding L2 regulizer of the 
 				kernel variables of the conv layer.
@@ -64,18 +68,16 @@ class SelCNN:
 			total_losses:
 			lr:
 		"""
-		if isinstance(gt_M, np.ndarray):
-			gt_M = tf.constant(gt_M.reshape((1,gt_M.shape[0], gt_M.shape[1], 1)), dtype=tf.float32)
+		self.gt_M = tf.placeholder(tf.float32, shape=gt_M_sz)
+		pre_shape = self.pre_M.get_shape().as_list()[1:]
 
-		gt_shape, pre_shape = gt_M.get_shape().as_list()[1:], self.pre_M.get_shape().as_list()[1:]
-		assert isinstance(gt_M, tf.Tensor)
-		assert gt_shape == pre_shape, \
+		assert gt_M_sz[1:] == pre_shape, \
 			'Shapes are not compatiable! gt_M : {0}, pre_M : {1}'.format(
 				gt_shape, pre_shape)
 		
 		#with tf.variable_scope(self.scope) as scope:
 		# Root mean square loss
-		rms_loss = tf.sqrt(tf.reduce_mean(tf.square(tf.sub(gt_M, self.pre_M))))
+		rms_loss = tf.sqrt(tf.reduce_mean(tf.square(tf.sub(self.gt_M, self.pre_M))))
 		# tf.squared_difference(x, y, name=None) try this! 
 		# (x-y)(x-y) 
 
@@ -103,7 +105,7 @@ class SelCNN:
 		self.loss = total_losses
 		return train_op, total_losses, lr, optimizer
 
-	def sel_feature_maps(self, sess, gt_M, vgg_maps, num_sel):
+	def sel_feature_maps(self, sess, vgg_conv, feed_dict, num_sel):
 		""" 
 		Selects saliency feature maps. 
 		The change of the Loss function by the permutation
@@ -112,6 +114,9 @@ class SelCNN:
 
 		Further simplication can be done by only compute
 		the diagonol part of the Hessian matrix.
+
+		S = - partial(L)/patial(F) * F 
+			+ 0.5 * sencondOrderPartial(L)/F
 
 		Args:
 			gt_M: tensor, ground truth heat map.
@@ -122,6 +127,24 @@ class SelCNN:
 			sel_maps: np.ndarray, conv layer of vgg.
 			idx: list, indexes of selected maps
 		"""
+		# Compute first derevatives w.r.t each feature maps
+		grads = tf.gradients(self.loss, self.feature_maps)
 
-		pass
+		# Compute diagnol part of Hessian which are the second derevatives
+		# of Loss_x w.r.t x
+		H_diag = [tf.gradients(grads[i], self.feature_maps[i])[0] for i in range(512)]
+
+		# Compute the significance vector, with each element stand for 
+		# the score of each feature map
+		S = [tf.reduce_sum(-tf.mul(grads[i], self.feature_maps[i])) \
+			+ 0.5 * tf.reduce_sum(tf.mul(H_diag[i], self.feature_maps[i]**2)) for i in range(512)]
+		S_tensor = tf.pack(S, axis=0) # shape (512,)
+
+		vgg_maps, signif_v = sess.run([vgg_conv, S_tensor], feed_dict=feed_dict)
+
+		# Retrieve the top-nul_sel feature maps and corresponding idx
+		idxs = sorted(range(len(signif_v)), key=lambda i: signif_v[i])[-num_sel:]
+		best_maps = vgg_maps[...,idxs]
+		print('Selected maps shape:'%best_maps.shape)
+		return best_maps, idxs
 		
