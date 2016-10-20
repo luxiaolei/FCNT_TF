@@ -1,7 +1,7 @@
 """
 Main script for FCNT tracker. 
 """
-
+#%%
 # Import custom class and functions
 from inputproducer import InputProducer
 from tracker import TrackerVanilla
@@ -15,7 +15,7 @@ import tensorflow as tf
 
 import os
 
-
+#%%
 tf.app.flags.DEFINE_integer('iter_step_sel', 200,
                           """Number of steps for trainning"""
                           """selCNN networks.""")

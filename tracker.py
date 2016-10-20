@@ -133,9 +133,10 @@ class Tracker:
 	@classmethod
 	def compute_conf(roi, loc_p):
 		"""Helper func for computing confidence"""
-	    cx,cy,w,h = loc_p
-	    conf = np.sum(roi[y-int(0.5*h): y+int(0.5*h), x-int(0.5*w):x+int(0.5*w)])
-	    return conf
+		cx,cy,w,h = loc_p
+		conf = np.sum(roi[y-int(0.5*h): y+int(0.5*h), \
+					x-int(0.5*w):x+int(0.5*w)])
+		return conf
 
 	@classmethod
 	def affgeo2loc(las_loc, aff_param):
